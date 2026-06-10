@@ -3,7 +3,7 @@
 > API de consulta de productos por código de barras para el mercado mexicano.  
 > Escanea con cámara (video en vivo o foto) o consulta vía REST.
 
-**Autor:** AurumBot  
+**Autor:** AurumCapitalHolding  
 **Stack:** Next.js 14 · TypeScript · PostgreSQL · Drizzle ORM · Docker · Easypanel
 
 ---
@@ -57,7 +57,7 @@ GET /api/barcode/7501055300595
 
 ```bash
 # 1. Clonar
-git clone https://github.com/qhosting/codebar.git
+git clone <url-del-repositorio>
 cd codebar
 
 # 2. Variables de entorno
@@ -90,7 +90,7 @@ Levanta la app en `http://localhost:3000` junto con PostgreSQL 16.
 
 ### Producción (Easypanel)
 
-1. Conecta el repo `qhosting/codebar` en Easypanel como **App**
+1. Conecta tu repositorio de GitHub en Easypanel como **App**
 2. Agrega las variables de entorno:
 
 ```env
@@ -130,4 +130,4 @@ npm run db:migrate   # Aplicar migraciones + seed
 
 ---
 
-© 2026 AurumBot
+© 2026 AurumCapitalHolding
