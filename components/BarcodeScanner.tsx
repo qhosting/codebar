@@ -46,7 +46,7 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
   const { ref } = useZxing({
     paused: !active || mode === "photo",
     onDecodeResult(result) {
-      const code = result.getText();
+      const code = result.rawValue;
       if (code !== lastCode) {
         setLastCode(code);
         onDetect(code);
