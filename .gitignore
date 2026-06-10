@@ -19,7 +19,7 @@ dist/
 .env.production.local
 
 # Drizzle
-drizzle/meta/
+# drizzle/meta/ # Do not ignore this, as Drizzle needs the journal to run migrations in production.
 
 # Logs
 npm-debug.log*
