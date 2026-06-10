@@ -12,6 +12,7 @@
     "db:seed": "tsx -e \"import('./lib/db/seed.ts').then(m => m.seed()).then(() => process.exit(0))\""
   },
   "dependencies": {
+    "@zxing/library": "^0.23.0",
     "axios": "^1.17.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.9",

@@ -563,7 +563,70 @@ body::before {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ─── Responsive ────────────────────────────────────────────────────────── */
+/* ─── Scanner Mode Toggle ───────────────────────────────────────────────────── */
+.scanner-mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+}
+
+.scanner-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.scanner-mode-btn.active {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: 0 2px 8px rgba(108, 99, 255, 0.3);
+}
+
+.scanner-mode-btn:not(.active):hover {
+  background: var(--bg-glass);
+  color: var(--text-primary);
+}
+
+.scanner-fallback-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-base);
+  font-family: var(--font-sans);
+}
+
+.scanner-fallback-hint:hover {
+  background: rgba(108, 99, 255, 0.2);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+.photo-mode .scanner-idle {
+  cursor: pointer;
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .app-wrapper { padding: 0 14px 60px; }
   .product-header { flex-direction: column; }
