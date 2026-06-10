@@ -51,6 +51,64 @@ GET /api/barcode/7501055300595
 }
 ```
 
+### Guía de Integración (Cómo implementar)
+
+Puedes consumir esta API desde cualquier frontend o servicio backend utilizando `fetch` u otras librerías HTTP.
+
+#### 1. Consultar un Producto (GET)
+Realiza una petición `GET` enviando el código de barras en la URL. Si el producto no existe en la base de datos local, el servicio lo buscará automáticamente en Open Food Facts y UPC Item DB, registrándolo en la base de datos para futuras consultas.
+
+```javascript
+async function buscarProducto(codigoBarras) {
+  try {
+    const respuesta = await fetch(`https://tu-dominio.com/api/barcode/${codigoBarras}`);
+    const data = await respuesta.json();
+    
+    if (data.success) {
+      console.log("Producto encontrado:", data.product);
+      // Aquí puedes renderizar el producto en tu interfaz
+    } else {
+      console.log("Producto no encontrado:", data.message);
+    }
+  } catch (error) {
+    console.error("Error al consultar la API:", error);
+  }
+}
+```
+
+#### 2. Registrar un Producto (POST)
+Si deseas registrar un nuevo producto manualmente en la base de datos local, envía una solicitud `POST` con la información del producto estructurada en formato JSON:
+
+```javascript
+async function registrarProducto(datosProducto) {
+  try {
+    const respuesta = await fetch('https://tu-dominio.com/api/barcode', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        barcode: datosProducto.barcode, // Mínimo 8 dígitos (Requerido)
+        name: datosProducto.name,       // Nombre del producto (Requerido)
+        brand: datosProducto.brand,     // Marca (Opcional)
+        category: datosProducto.category, // Categoría (Opcional)
+        priceMx: datosProducto.priceMx, // Precio en pesos MXN (Opcional)
+        unit: datosProducto.unit        // Unidad, ej: "600ml", "1kg" (Opcional)
+      })
+    });
+    
+    const data = await respuesta.json();
+    if (data.success) {
+      console.log("Producto guardado exitosamente:", data.product);
+    } else {
+      console.error("Errores de validación:", data.errors || data.message);
+    }
+  } catch (error) {
+    console.error("Error al registrar producto:", error);
+  }
+}
+```
+
 ---
 
 ## Instalación y desarrollo
