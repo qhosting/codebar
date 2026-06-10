@@ -279,6 +279,26 @@ export default function HomePage() {
           <div className={`toast toast-${toast.type}`}>{toast.msg}</div>
         </div>
       )}
+
+      {/* Footer */}
+      <footer style={{
+        marginTop: 32,
+        paddingTop: 16,
+        borderTop: "1px solid var(--border-subtle)",
+        textAlign: "center",
+        color: "var(--text-muted)",
+        fontSize: "0.75rem",
+      }}>
+        © 2026 <strong style={{ color: "var(--text-secondary)" }}>AurumBot</strong> ·{" "}
+        <a
+          href="https://github.com/qhosting/codebar"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "var(--accent-primary)", textDecoration: "none" }}
+        >
+          github.com/qhosting/codebar
+        </a>
+      </footer>
     </div>
   );
 }

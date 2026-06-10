@@ -12,8 +12,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-# Placeholder so Next.js build doesn't crash (DB not available at build time)
-ENV DATABASE_URL=postgres://placeholder:placeholder@placeholder:5432/placeholder
+# Next.js evalúa DATABASE_URL en tiempo de build solo para validar el módulo de configuración.
+# La conexión real se establece en runtime con la variable inyectada por Easypanel/Docker.
+# Este valor no se usa para ninguna consulta real durante el build.
+ENV DATABASE_URL=postgres://build_time_only:not_real@localhost:5432/not_real
 
 # Build Next.js app
 RUN npm run build

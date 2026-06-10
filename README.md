@@ -1,36 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CodeBar API
 
-## Getting Started
+> API de consulta de productos por código de barras para el mercado mexicano.  
+> Escanea con cámara (video en vivo o foto) o consulta vía REST.
 
-First, run the development server:
+**Autor:** AurumBot  
+**Stack:** Next.js 14 · TypeScript · PostgreSQL · Drizzle ORM · Docker · Easypanel
+
+---
+
+## Funcionalidades
+
+- 📷 **Scanner en tiempo real** — video streaming con `react-zxing` (EAN-13, UPC, QR, Code128)
+- 📸 **Scanner por foto** — captura imagen, detecta con `BarcodeDetector` API nativa o ZXing estático
+- 🗄️ **Base de datos local** — 50 productos mexicanos pre-cargados (Bimbo, FEMSA, Lala, Grupo Modelo, etc.)
+- 🌍 **Open Food Facts** — consulta automática si no está en BD local (sin límite, gratis)
+- 🔍 **UPC Item DB** — fallback secundario (100 req/día gratis)
+- 💾 **Auto-caché** — productos externos se guardan en BD local automáticamente
+- 🐳 **Docker ready** — Dockerfile multi-stage + docker-compose para desarrollo local
+
+---
+
+## API REST
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `GET` | `/api/barcode/:codigo` | Consultar producto por código |
+| `POST` | `/api/barcode` | Registrar producto manualmente |
+| `GET` | `/api/barcode/search?q=texto` | Buscar por nombre o marca |
+| `GET` | `/api/health` | Estado del servicio y BD |
+
+### Ejemplo de respuesta
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+GET /api/barcode/7501055300595
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```json
+{
+  "success": true,
+  "source": "local",
+  "product": {
+    "barcode": "7501055300595",
+    "name": "Coca-Cola 600ml",
+    "brand": "Coca-Cola FEMSA",
+    "category": "Bebidas",
+    "unit": "600ml",
+    "country": "MX",
+    "source": "manual"
+  }
+}
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Instalación y desarrollo
 
-## Learn More
+```bash
+# 1. Clonar
+git clone https://github.com/qhosting/codebar.git
+cd codebar
 
-To learn more about Next.js, take a look at the following resources:
+# 2. Variables de entorno
+cp .env.example .env.local
+# Editar DATABASE_URL con tu PostgreSQL
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# 3. Instalar dependencias
+npm install
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 4. Correr migraciones + seed
+npm run db:migrate
 
-## Deploy on Vercel
+# 5. Servidor de desarrollo
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Abre [http://localhost:3000](http://localhost:3000)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Deploy con Docker / Easypanel
+
+### Desarrollo local (Docker Compose)
+
+```bash
+docker compose up --build
+```
+
+Levanta la app en `http://localhost:3000` junto con PostgreSQL 16.
+
+### Producción (Easypanel)
+
+1. Conecta el repo `qhosting/codebar` en Easypanel como **App**
+2. Agrega las variables de entorno:
+
+```env
+DATABASE_URL=postgres://user:pass@servicio-postgres:5432/codebar-db
+NODE_ENV=production
+NEXT_TELEMETRY_DISABLED=1
+```
+
+3. Las migraciones y el seed corren **automáticamente** al iniciar el contenedor.
+
+---
+
+## Scripts disponibles
+
+```bash
+npm run dev          # Servidor de desarrollo
+npm run build        # Build de producción
+npm run db:generate  # Generar nueva migración
+npm run db:migrate   # Aplicar migraciones + seed
+```
+
+---
+
+## Fuentes de datos
+
+| Fuente | Tipo | Límite |
+|---|---|---|
+| BD local PostgreSQL | Primaria | Sin límite |
+| [Open Food Facts](https://world.openfoodfacts.org/) | Externa gratuita | Sin límite |
+| [UPC Item DB](https://www.upcitemdb.com/) | Fallback gratuito | 100 req/día |
+
+---
+
+## Formatos de código soportados
+
+`EAN-13` · `EAN-8` · `UPC-A` · `UPC-E` · `Code128` · `Code39` · `QR Code`
+
+---
+
+© 2026 AurumBot

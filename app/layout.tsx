@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     "API y app de demostración para consultar productos mexicanos por código de barras. Escanea con tu cámara o ingresa el código manualmente.",
   keywords: ["código de barras", "productos México", "EAN", "UPC", "barcode API"],
+  authors: [{ name: "AurumBot" }],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
