@@ -36,10 +36,42 @@ async function tryZxingFromImage(imageUrl: string): Promise<string | null> {
   }
 }
 
+// Helper para convertir archivo a base64
+function fileToBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+// ─── Estrategia 3: Agente de IA para decodificar imágenes complejas ───────────
+async function tryAiDetector(file: Blob): Promise<string | null> {
+  try {
+    const base64 = await fileToBase64(file);
+    const response = await fetch("/api/barcode/ai-scan", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image: base64,
+        mimeType: file.type,
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.success ? data.code : null;
+  } catch {
+    return null;
+  }
+}
+
 export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
   const [lastCode, setLastCode] = useState("");
   const [mode, setMode] = useState<"video" | "photo">("video");
-  const [photoStatus, setPhotoStatus] = useState<"idle" | "processing" | "ok" | "fail">("idle");
+  const [photoStatus, setPhotoStatus] = useState<"idle" | "processing" | "ai_processing" | "ok" | "fail">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─── Modo video: react-zxing en tiempo real ───────────────────────────────
@@ -79,6 +111,12 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
       // Estrategia 2: ZXing desde imagen (fallback universal)
       if (!code) {
         code = await tryZxingFromImage(objectUrl);
+      }
+
+      // Estrategia 3: Agente de IA (último recurso)
+      if (!code) {
+        setPhotoStatus("ai_processing");
+        code = await tryAiDetector(file);
       }
 
       if (code) {
@@ -166,6 +204,15 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
                 <p>Analizando imagen...</p>
               </>
             )}
+            {photoStatus === "ai_processing" && (
+              <>
+                <div className="scanner-idle-icon" style={{ animation: "pulse 0.8s infinite" }}>🤖</div>
+                <p>Agente IA analizando...</p>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>
+                  Descifrando código con inteligencia artificial
+                </p>
+              </>
+            )}
             {photoStatus === "ok" && (
               <>
                 <div className="scanner-idle-icon">✅</div>
@@ -196,7 +243,7 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
         id="photo-capture-input"
       />
 
-      {mode === "photo" && photoStatus === "idle" && (
+      {mode === "photo" && (photoStatus === "idle" || photoStatus === "fail") && (
         <button
           className="btn btn-primary btn-full"
           style={{ marginTop: 12 }}
