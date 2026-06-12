@@ -74,7 +74,7 @@ interface ExtendedTrackCapabilities {
 }
 
 export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
-  const [lastCode, setLastCode] = useState("");
+  const lastCodeRef = useRef("");
   const [mode, setMode] = useState<"video" | "photo">("video");
   const [photoStatus, setPhotoStatus] = useState<"idle" | "processing" | "ai_processing" | "ok" | "fail">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,24 +86,42 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
   const [torch, setTorch] = useState<boolean>(false);
   
   const [nativeSupported, setNativeSupported] = useState(false);
-  const [selectedEngine, setSelectedEngine] = useState<"auto" | "mlkit" | "zxing">("auto");
+  const [selectedEngine, setSelectedEngine] = useState<"auto" | "mlkit" | "zxing" | "strich">("auto");
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
-  // Inicializar lector ZXing reutilizable
+  // Estados y refs de Strich.io
+  const strichContainerRef = useRef<HTMLDivElement | null>(null);
+  const [strichLicenseKey, setStrichLicenseKey] = useState<string>("");
+  const [strichState, setStrichState] = useState<"idle" | "initializing" | "running" | "error">("idle");
+  const [strichErrorMsg, setStrichErrorMsg] = useState<string>("");
+
+  // Inicializar lector ZXing y Strich license key
   useEffect(() => {
     const isSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
     setTimeout(() => {
       setNativeSupported(isSupported);
     }, 0);
     readerRef.current = new BrowserMultiFormatReader();
+
+    // Cargar clave de licencia de Strich.io desde localStorage o env
+    const storedKey = localStorage.getItem("strich_license_key") || "";
+    setTimeout(() => {
+      setStrichLicenseKey(storedKey || process.env.NEXT_PUBLIC_STRICH_LICENSE_KEY || "");
+    }, 0);
+
     return () => {
       readerRef.current = null;
     };
   }, []);
+
+  const handleStrichLicenseKeyChange = (key: string) => {
+    setStrichLicenseKey(key);
+    localStorage.setItem("strich_license_key", key);
+  };
 
   // Función de diagnóstico real (Benchmark)
   const runDiagnosticTest = async () => {
@@ -185,7 +203,8 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     let activeStream: MediaStream | null = null;
 
     async function startCamera() {
-      if (!active || mode !== "video") return;
+      // Si Strich.io está seleccionado, no inicializar la cámara nativa aquí (Strich.io maneja su propio stream)
+      if (!active || mode !== "video" || selectedEngine === "strich") return;
 
       try {
         const constraints: MediaStreamConstraints = {
@@ -221,7 +240,7 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
       setTorch(false);
       setZoom(1);
     };
-  }, [active, mode]);
+  }, [active, mode, selectedEngine]);
 
   // ─── Aplicación de Restricciones Avanzadas (Focus, Zoom, Torch) ─────────────
   useEffect(() => {
@@ -344,10 +363,12 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
           }
         }
 
-        if (code && code !== lastCode) {
-          setLastCode(code);
+        if (code && code !== lastCodeRef.current) {
+          lastCodeRef.current = code;
           onDetect(code);
-          setTimeout(() => setLastCode(""), 3000);
+          setTimeout(() => {
+            lastCodeRef.current = "";
+          }, 3000);
         }
       } catch (err) {
         console.error("Error during scan frame processing:", err);
@@ -359,7 +380,7 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     return () => {
       clearInterval(intervalId);
     };
-  }, [stream, mode, active, lastCode, onDetect, selectedEngine]);
+  }, [stream, mode, active, onDetect, selectedEngine]);
 
   // ─── Modo foto: captura imagen → decode estático ──────────────────────────
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -405,9 +426,107 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     }
   };
 
+  // ─── Inicialización y Control de Strich.io ──────────────────────────────────
+  useEffect(() => {
+    let readerInstance: { destroy: () => void } | null = null;
+    let isCancelled = false;
+
+    async function initStrich() {
+      if (!active || mode !== "video" || selectedEngine !== "strich") {
+        setStrichState("idle");
+        return;
+      }
+
+      setStrichState("initializing");
+      setStrichErrorMsg("");
+
+      const licenseToUse = strichLicenseKey || process.env.NEXT_PUBLIC_STRICH_LICENSE_KEY || "";
+      if (!licenseToUse) {
+        setStrichState("error");
+        setStrichErrorMsg("La clave de licencia de Strich.io está vacía. Por favor ingrésala en la sección de diagnósticos abajo.");
+        return;
+      }
+
+      try {
+        const sdkModule = await import("@pixelverse/strichjs-sdk");
+        const { StrichSDK, BarcodeReader } = sdkModule;
+
+        if (isCancelled) return;
+
+        // Inicializar el SDK de Strich
+        await StrichSDK.initialize(licenseToUse);
+
+        if (isCancelled) return;
+        if (!strichContainerRef.current) return;
+
+        // Crear la instancia de BarcodeReader
+        const reader = new BarcodeReader({
+          selector: strichContainerRef.current,
+          engine: {
+            symbologies: ["ean13", "ean8", "upca", "upce", "code128", "code39", "qr"],
+          },
+        });
+
+        readerInstance = reader;
+
+        // Registrar el manejador de detección (solo lectura de código, sin mostrar info)
+        reader.detected = (detections) => {
+          if (detections && detections.length > 0) {
+            const code = detections[0].data;
+            if (code && code !== lastCodeRef.current) {
+              lastCodeRef.current = code;
+              onDetect(code);
+              // Resetear el código tras 3 segundos para permitir re-escanear
+              setTimeout(() => {
+                lastCodeRef.current = "";
+              }, 3000);
+            }
+          }
+        };
+
+        await reader.initialize();
+        if (isCancelled) {
+          reader.destroy();
+          return;
+        }
+
+        await reader.start();
+        if (isCancelled) {
+          reader.destroy();
+          return;
+        }
+
+        setStrichState("running");
+      } catch (err) {
+        console.error("Error al iniciar Strich.io:", err);
+        if (!isCancelled) {
+          setStrichState("error");
+          setStrichErrorMsg(err instanceof Error ? err.message : String(err));
+        }
+      }
+    }
+
+    initStrich();
+
+    return () => {
+      isCancelled = true;
+      if (readerInstance) {
+        try {
+          readerInstance.destroy();
+        } catch (e) {
+          console.warn("Error destroying Strich reader:", e);
+        }
+      }
+      setStrichState("idle");
+    };
+  }, [active, mode, selectedEngine, strichLicenseKey, onDetect]);
+
   const getDynamicBadgeText = () => {
     if (selectedEngine === "auto") {
       return nativeSupported ? "🤖 Auto: ML Kit (Nativo)" : "🤖 Auto: ZXing (Web)";
+    }
+    if (selectedEngine === "strich") {
+      return `⭐ Strich.io (${strichState})`;
     }
     return selectedEngine === "mlkit" ? "⚡ Google ML Kit (Nativo)" : "⚙️ Motor ZXing (Web)";
   };
@@ -468,6 +587,13 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
           >
             ⚙️ ZXing (Web)
           </button>
+          <button
+            type="button"
+            className={`engine-btn ${selectedEngine === "strich" ? "active" : ""}`}
+            onClick={() => setSelectedEngine("strich")}
+          >
+            ⭐ Strich.io
+          </button>
         </div>
       </div>
 
@@ -482,14 +608,35 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
       {/* Modo VIDEO */}
       {mode === "video" && (
         <div className="scanner-wrapper">
-          <video ref={videoRef} className="scanner-video" playsInline muted autoPlay />
-          <div className="scanner-overlay">
-            <div className="scanner-frame">
-              <div className="scanner-frame-tr" />
-              <div className="scanner-frame-bl" />
-              <div className="scanner-line" />
+          {selectedEngine === "strich" ? (
+            <div className="strich-container-wrapper">
+              <div ref={strichContainerRef} className="strich-scanner-element" />
+              {strichState === "initializing" && (
+                <div className="strich-state-overlay">
+                  <div className="spinner" />
+                  <p>Iniciando Strich.io SDK...</p>
+                </div>
+              )}
+              {strichState === "error" && (
+                <div className="strich-state-overlay error">
+                  <div className="scanner-idle-icon">⚠️</div>
+                  <p style={{ color: "var(--accent-error)", fontWeight: "bold" }}>Error al iniciar Strich.io</p>
+                  <p style={{ fontSize: "0.82rem", marginTop: 8 }}>{strichErrorMsg}</p>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <>
+              <video ref={videoRef} className="scanner-video" playsInline muted autoPlay />
+              <div className="scanner-overlay">
+                <div className="scanner-frame">
+                  <div className="scanner-frame-tr" />
+                  <div className="scanner-frame-bl" />
+                  <div className="scanner-line" />
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="scanner-engine-badge">
             {getDynamicBadgeText()}
@@ -631,6 +778,44 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
             <div className="diagnostic-row">
               <span className="diagnostic-name">Agente de IA (API):</span>
               <span className="diagnostic-status status-ok">🟢 Disponible</span>
+            </div>
+            <div className="diagnostic-row">
+              <span className="diagnostic-name">Strich.io SDK:</span>
+              <span className={`diagnostic-status ${strichLicenseKey ? "status-ok" : "status-error"}`}>
+                {strichLicenseKey ? "🟢 Disponible" : "🔴 Clave requerida"}
+              </span>
+            </div>
+
+            <div className="diagnostic-info">
+              <p><strong>🔑 Clave de Licencia de Strich.io:</strong></p>
+              <input
+                type="text"
+                placeholder="Ingresar clave de licencia de Strich.io"
+                value={strichLicenseKey}
+                onChange={(e) => handleStrichLicenseKeyChange(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1px solid var(--border-accent)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                  fontSize: "0.8rem",
+                  marginTop: "6px",
+                  outline: "none",
+                }}
+              />
+              <p style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: 6 }}>
+                Requerido para usar el motor Strich.io. Obtén una clave de prueba gratuita en{" "}
+                <a
+                  href="https://strich.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "var(--accent-info)", textDecoration: "underline" }}
+                >
+                  strich.io
+                </a>.
+              </p>
             </div>
 
             <div className="diagnostic-info">
