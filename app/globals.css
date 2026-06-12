@@ -921,8 +921,8 @@ body::before {
   margin-top: 4px;
 }
 
-/* ─── Strich.io Scanner Integration ───────────────────────────────────────── */
-.strich-container-wrapper {
+/* ─── html5-qrcode Scanner Integration ────────────────────────────────────── */
+.html5qrcode-container-wrapper {
   position: relative;
   width: 100%;
   height: 100%;
@@ -932,7 +932,7 @@ body::before {
   overflow: hidden;
 }
 
-.strich-scanner-element {
+.html5qrcode-scanner-element {
   width: 100%;
   height: 100%;
   min-height: 350px;
@@ -955,7 +955,7 @@ body::before {
   100% { transform: rotate(360deg); }
 }
 
-.strich-state-overlay {
+.scanner-state-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -972,9 +972,10 @@ body::before {
   text-align: center;
 }
 
-.strich-state-overlay.error {
+.scanner-state-overlay.error {
   background: rgba(0, 0, 0, 0.9);
 }
+
 
 
 

@@ -86,20 +86,18 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
   const [torch, setTorch] = useState<boolean>(false);
   
   const [nativeSupported, setNativeSupported] = useState(false);
-  const [selectedEngine, setSelectedEngine] = useState<"auto" | "mlkit" | "zxing" | "strich">("auto");
+  const [selectedEngine, setSelectedEngine] = useState<"auto" | "mlkit" | "zxing" | "html5qrcode">("auto");
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
-  // Estados y refs de Strich.io
-  const strichContainerRef = useRef<HTMLDivElement | null>(null);
-  const [strichLicenseKey, setStrichLicenseKey] = useState<string>("");
-  const [strichState, setStrichState] = useState<"idle" | "initializing" | "running" | "error">("idle");
-  const [strichErrorMsg, setStrichErrorMsg] = useState<string>("");
+  // Estados de html5-qrcode
+  const [html5QrcodeState, setHtml5QrcodeState] = useState<"idle" | "initializing" | "running" | "error">("idle");
+  const [html5QrcodeErrorMsg, setHtml5QrcodeErrorMsg] = useState<string>("");
 
-  // Inicializar lector ZXing y Strich license key
+  // Inicializar lector ZXing
   useEffect(() => {
     const isSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
     setTimeout(() => {
@@ -107,21 +105,10 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     }, 0);
     readerRef.current = new BrowserMultiFormatReader();
 
-    // Cargar clave de licencia de Strich.io desde localStorage o env
-    const storedKey = localStorage.getItem("strich_license_key") || "";
-    setTimeout(() => {
-      setStrichLicenseKey(storedKey || process.env.NEXT_PUBLIC_STRICH_LICENSE_KEY || "");
-    }, 0);
-
     return () => {
       readerRef.current = null;
     };
   }, []);
-
-  const handleStrichLicenseKeyChange = (key: string) => {
-    setStrichLicenseKey(key);
-    localStorage.setItem("strich_license_key", key);
-  };
 
   // Función de diagnóstico real (Benchmark)
   const runDiagnosticTest = async () => {
@@ -203,8 +190,8 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     let activeStream: MediaStream | null = null;
 
     async function startCamera() {
-      // Si Strich.io está seleccionado, no inicializar la cámara nativa aquí (Strich.io maneja su propio stream)
-      if (!active || mode !== "video" || selectedEngine === "strich") return;
+      // Si html5-qrcode está seleccionado, no inicializar la cámara nativa aquí (html5-qrcode maneja su propio stream)
+      if (!active || mode !== "video" || selectedEngine === "html5qrcode") return;
 
       try {
         const constraints: MediaStreamConstraints = {
@@ -426,107 +413,115 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
     }
   };
 
-  // ─── Inicialización y Control de Strich.io ──────────────────────────────────
+  // ─── Inicialización y Control de html5-qrcode ──────────────────────────────────
   useEffect(() => {
-    let readerInstance: { destroy: () => void } | null = null;
+    let html5QrcodeInstance: import("html5-qrcode").Html5Qrcode | null = null;
     let isCancelled = false;
 
-    async function initStrich() {
-      if (!active || mode !== "video" || selectedEngine !== "strich") {
-        setStrichState("idle");
+    async function initHtml5Qrcode() {
+      if (!active || mode !== "video" || selectedEngine !== "html5qrcode") {
+        setHtml5QrcodeState("idle");
         return;
       }
 
-      setStrichState("initializing");
-      setStrichErrorMsg("");
-
-      const licenseToUse = strichLicenseKey || process.env.NEXT_PUBLIC_STRICH_LICENSE_KEY || "";
-      if (!licenseToUse) {
-        setStrichState("error");
-        setStrichErrorMsg("La clave de licencia de Strich.io está vacía. Por favor ingrésala en la sección de diagnósticos abajo.");
-        return;
-      }
+      setHtml5QrcodeState("initializing");
+      setHtml5QrcodeErrorMsg("");
 
       try {
-        const sdkModule = await import("@pixelverse/strichjs-sdk");
-        const { StrichSDK, BarcodeReader } = sdkModule;
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
 
         if (isCancelled) return;
 
-        // Inicializar el SDK de Strich
-        await StrichSDK.initialize(licenseToUse);
+        // Crear la instancia asignando el ID estático del div contenedor
+        const reader = new Html5Qrcode("html5-qrcode-reader");
+        html5QrcodeInstance = reader;
 
-        if (isCancelled) return;
-        if (!strichContainerRef.current) return;
-
-        // Crear la instancia de BarcodeReader
-        const reader = new BarcodeReader({
-          selector: strichContainerRef.current,
-          engine: {
-            symbologies: ["ean13", "ean8", "upca", "upce", "code128", "code39", "qr"],
+        const config = {
+          fps: 15,
+          qrbox: (width: number, height: number) => {
+            // Un recuadro optimizado para códigos de barra (ancho y bajo)
+            return {
+              width: Math.floor(width * 0.8),
+              height: Math.floor(height * 0.35)
+            };
           },
-        });
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.QR_CODE
+          ]
+        };
 
-        readerInstance = reader;
-
-        // Registrar el manejador de detección (solo lectura de código, sin mostrar info)
-        reader.detected = (detections) => {
-          if (detections && detections.length > 0) {
-            const code = detections[0].data;
-            if (code && code !== lastCodeRef.current) {
-              lastCodeRef.current = code;
-              onDetect(code);
+        await reader.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            if (decodedText && decodedText !== lastCodeRef.current) {
+              lastCodeRef.current = decodedText;
+              onDetect(decodedText);
               // Resetear el código tras 3 segundos para permitir re-escanear
               setTimeout(() => {
                 lastCodeRef.current = "";
               }, 3000);
             }
+          },
+          // Error callback silencioso para evitar spam de consola en cada frame
+          () => {}
+        );
+
+        if (isCancelled) {
+          if (reader.isScanning) {
+            await reader.stop();
           }
-        };
-
-        await reader.initialize();
-        if (isCancelled) {
-          reader.destroy();
           return;
         }
 
-        await reader.start();
-        if (isCancelled) {
-          reader.destroy();
-          return;
-        }
-
-        setStrichState("running");
+        setHtml5QrcodeState("running");
       } catch (err) {
-        console.error("Error al iniciar Strich.io:", err);
+        console.error("Error al iniciar html5-qrcode:", err);
         if (!isCancelled) {
-          setStrichState("error");
-          setStrichErrorMsg(err instanceof Error ? err.message : String(err));
+          setHtml5QrcodeState("error");
+          setHtml5QrcodeErrorMsg(err instanceof Error ? err.message : String(err));
         }
       }
     }
 
-    initStrich();
+    // Un pequeño delay para asegurar que el div con id "html5-qrcode-reader" está montado en el DOM
+    const timer = setTimeout(() => {
+      initHtml5Qrcode();
+    }, 100);
 
     return () => {
       isCancelled = true;
-      if (readerInstance) {
-        try {
-          readerInstance.destroy();
-        } catch (e) {
-          console.warn("Error destroying Strich reader:", e);
-        }
+      clearTimeout(timer);
+      
+      const instance = html5QrcodeInstance;
+      if (instance) {
+        const stopAndClear = async () => {
+          try {
+            if (instance.isScanning) {
+              await instance.stop();
+            }
+          } catch (e) {
+            console.warn("Error stopping html5-qrcode:", e);
+          }
+        };
+        stopAndClear();
       }
-      setStrichState("idle");
+      setHtml5QrcodeState("idle");
     };
-  }, [active, mode, selectedEngine, strichLicenseKey, onDetect]);
+  }, [active, mode, selectedEngine, onDetect]);
 
   const getDynamicBadgeText = () => {
     if (selectedEngine === "auto") {
       return nativeSupported ? "🤖 Auto: ML Kit (Nativo)" : "🤖 Auto: ZXing (Web)";
     }
-    if (selectedEngine === "strich") {
-      return `⭐ Strich.io (${strichState})`;
+    if (selectedEngine === "html5qrcode") {
+      return `📷 html5-qrcode (${html5QrcodeState})`;
     }
     return selectedEngine === "mlkit" ? "⚡ Google ML Kit (Nativo)" : "⚙️ Motor ZXing (Web)";
   };
@@ -589,10 +584,10 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
           </button>
           <button
             type="button"
-            className={`engine-btn ${selectedEngine === "strich" ? "active" : ""}`}
-            onClick={() => setSelectedEngine("strich")}
+            className={`engine-btn ${selectedEngine === "html5qrcode" ? "active" : ""}`}
+            onClick={() => setSelectedEngine("html5qrcode")}
           >
-            ⭐ Strich.io
+            📷 html5-qrcode
           </button>
         </div>
       </div>
@@ -608,20 +603,20 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
       {/* Modo VIDEO */}
       {mode === "video" && (
         <div className="scanner-wrapper">
-          {selectedEngine === "strich" ? (
-            <div className="strich-container-wrapper">
-              <div ref={strichContainerRef} className="strich-scanner-element" />
-              {strichState === "initializing" && (
-                <div className="strich-state-overlay">
+          {selectedEngine === "html5qrcode" ? (
+            <div className="html5qrcode-container-wrapper">
+              <div id="html5-qrcode-reader" className="html5qrcode-scanner-element" />
+              {html5QrcodeState === "initializing" && (
+                <div className="scanner-state-overlay">
                   <div className="spinner" />
-                  <p>Iniciando Strich.io SDK...</p>
+                  <p>Iniciando html5-qrcode...</p>
                 </div>
               )}
-              {strichState === "error" && (
-                <div className="strich-state-overlay error">
+              {html5QrcodeState === "error" && (
+                <div className="scanner-state-overlay error">
                   <div className="scanner-idle-icon">⚠️</div>
-                  <p style={{ color: "var(--accent-error)", fontWeight: "bold" }}>Error al iniciar Strich.io</p>
-                  <p style={{ fontSize: "0.82rem", marginTop: 8 }}>{strichErrorMsg}</p>
+                  <p style={{ color: "var(--accent-error)", fontWeight: "bold" }}>Error al iniciar html5-qrcode</p>
+                  <p style={{ fontSize: "0.82rem", marginTop: 8 }}>{html5QrcodeErrorMsg}</p>
                 </div>
               )}
             </div>
@@ -780,42 +775,10 @@ export function BarcodeScanner({ onDetect, active }: BarcodeScannerProps) {
               <span className="diagnostic-status status-ok">🟢 Disponible</span>
             </div>
             <div className="diagnostic-row">
-              <span className="diagnostic-name">Strich.io SDK:</span>
-              <span className={`diagnostic-status ${strichLicenseKey ? "status-ok" : "status-error"}`}>
-                {strichLicenseKey ? "🟢 Disponible" : "🔴 Clave requerida"}
+              <span className="diagnostic-name">html5-qrcode:</span>
+              <span className="diagnostic-status status-ok">
+                🟢 Disponible (Licencia Libre)
               </span>
-            </div>
-
-            <div className="diagnostic-info">
-              <p><strong>🔑 Clave de Licencia de Strich.io:</strong></p>
-              <input
-                type="text"
-                placeholder="Ingresar clave de licencia de Strich.io"
-                value={strichLicenseKey}
-                onChange={(e) => handleStrichLicenseKeyChange(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "var(--radius-sm)",
-                  border: "1px solid var(--border-accent)",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  fontSize: "0.8rem",
-                  marginTop: "6px",
-                  outline: "none",
-                }}
-              />
-              <p style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: 6 }}>
-                Requerido para usar el motor Strich.io. Obtén una clave de prueba gratuita en{" "}
-                <a
-                  href="https://strich.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "var(--accent-info)", textDecoration: "underline" }}
-                >
-                  strich.io
-                </a>.
-              </p>
             </div>
 
             <div className="diagnostic-info">
