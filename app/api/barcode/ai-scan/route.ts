@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
           {
             parts: [
               {
-                text: "Analyze this image and find any barcode (such as EAN-13, EAN-8, UPC-A, UPC-E, Code 128) or QR code. Extract only the raw number or text of the code. Do not include any explanations, words, labels, or formatting. If you cannot find any barcode or QR code, respond with exactly 'NOT_FOUND'.",
+                text: "Analyze this image and find any barcode (such as EAN-13, EAN-8, UPC-A, UPC-E, Code 128) or QR code. EAN-13 and UPC barcodes are composed of parallel vertical lines of varying widths, usually with numbers printed directly underneath them.\n\nIMPORTANT: There may be surrounding text, labels, ingredients, or other numbers in the image. Ignore all surrounding descriptions, nutrition facts, weights, and labels. Focus strictly on identifying the barcode or QR code.\n\nLocate the numbers printed directly beneath the vertical barcode lines. Verify that they form a valid barcode sequence (EAN-13 has 13 digits, UPC-A has 12 digits, etc.).\n\nExtract and return ONLY the raw number or text of the barcode/QR code. Do not include any explanations, formatting, markdown, spaces, labels, or extra words.\n\nIf you cannot find any barcode or QR code in the image, respond with exactly 'NOT_FOUND'.",
               },
               {
                 inlineData: {

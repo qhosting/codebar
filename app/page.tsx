@@ -25,7 +25,12 @@ export default function HomePage() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(HISTORY_KEY);
-      if (stored) setHistory(JSON.parse(stored));
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setTimeout(() => {
+          setHistory(parsed);
+        }, 0);
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -76,7 +81,6 @@ export default function HomePage() {
       setQueryState("error");
       setResult({ success: false, message: "Error de conexión. Verifica que el servidor esté activo." });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history]);
 
   const handleModeSwitch = (newMode: Mode) => {
